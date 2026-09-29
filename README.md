@@ -22,7 +22,7 @@ The TCA9548A I²C multiplexer entry lets you select the Pico's upstream SDA/SCL 
 
 The **Apps** screen contains an I²C Explorer. It lists configured Pico buses and multiplexer channels, scans a selected path, and reads or writes 1–32 bytes at a decimal address. A register number is optional. Hex input such as `24 00` writes two bytes. Requests use the selected multiplexer channel and take effect immediately; consult the target device's datasheet before writing.
 
-The **API** screen has searchable example requests and responses for Wi-Fi changes, pin and device configuration, buttons, LEDs, multiplexer sensors, and raw I²C operations. Each example includes a short wiring note. Replace its example IDs, network names, and readings with your own values.
+The **API** screen has searchable example requests and responses for Wi-Fi changes, pin and device configuration, buttons, LEDs, multiplexer sensors, and raw I²C operations. Each example includes a short wiring note; hardware examples also show a connection diagram with physical Pico pin numbers. Replace its example IDs, network names, and readings with your own values.
 
 ## JSON API
 
