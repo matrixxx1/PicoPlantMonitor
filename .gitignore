@@ -1,0 +1,4 @@
+config.json
+*.uf2
+__pycache__/
+tailnet-proxy/*.exe
