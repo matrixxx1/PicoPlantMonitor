@@ -232,6 +232,20 @@ def i2c_request(value):
     return address, register
 
 
+def wifi_settings(value, current):
+    if not isinstance(value, dict):
+        raise ValueError('Invalid Wi-Fi settings')
+    ssid = str(value.get('ssid', ''))
+    password = str(value.get('password', ''))
+    if not 1 <= len(ssid.encode()) <= 32 or len(password) > 63:
+        raise ValueError('Invalid Wi-Fi credentials')
+    if value.get('open_network'):
+        password = ''
+    elif not password and ssid == current.get('ssid'):
+        password = current.get('password', '')
+    return {'ssid': ssid, 'password': password}
+
+
 def save_and_reboot(client, result):
     save()
     send_json(client, '200 OK', result)
@@ -515,12 +529,7 @@ def handle(client):
             send_json(client, '400 Bad Request', {'error': str(exc)})
     elif path == '/api/wifi' and method == 'PUT':
         try:
-            new = json.loads(body)
-            ssid = str(new.get('ssid', ''))
-            password = str(new.get('password', ''))
-            if not 1 <= len(ssid.encode()) <= 32 or len(password) > 63:
-                raise ValueError('Invalid Wi-Fi credentials')
-            config['wifi'] = {'ssid': ssid, 'password': password}
+            config['wifi'] = wifi_settings(json.loads(body), config.get('wifi', {}))
             save()
             send_json(client, '200 OK', {'saved': True, 'rebooting': True})
             time.sleep(0.5)

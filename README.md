@@ -22,7 +22,9 @@ The TCA9548A I²C multiplexer entry lets you select the Pico's upstream SDA/SCL 
 
 The **Apps** screen contains an I²C Explorer. It lists configured Pico buses and multiplexer channels, scans a selected path, and reads or writes 1–32 bytes at a decimal address. A register number is optional. Hex input such as `24 00` writes two bytes. Requests use the selected multiplexer channel and take effect immediately; consult the target device's datasheet before writing.
 
-The **API** screen has searchable example requests and responses for Wi-Fi changes, pin and device configuration, buttons, LEDs, multiplexer sensors, and raw I²C operations. Each example includes a short wiring note; hardware examples also show a connection diagram with physical Pico pin numbers. Replace its example IDs, network names, and readings with your own values.
+The **API** screen has searchable example requests and responses for Wi-Fi changes, pin and device configuration, buttons, LEDs, multiplexer sensors, and raw I²C operations. Each example includes a short wiring note; hardware examples show illustrated Pico, wire, component, and physical-pin connections. LED examples include a 330 Ω resistor and its color bands. I²C examples explain optional 4.7 kΩ pull-ups when boards lack them. Replace example IDs, network names, and readings with your own values.
+
+The **Wifi** screen holds network setup. It shows the saved SSID, lets you enter a new network, and has an explicit open-network option. Leaving the password blank for the same SSID keeps the existing saved password; the password is never returned by the API.
 
 ## JSON API
 
@@ -32,6 +34,8 @@ The **API** screen has searchable example requests and responses for Wi-Fi chang
 - `PUT /api/pins/4` — JSON such as `{"mode":"button","pull":"up","note":"Seed bay 2"}`. Saves to flash and reboots to apply the pin mode.
 - `PUT /api/pins/14/value` — `{"value":1}` or `{"value":0}` for a pin already configured as `output`. Changes the live state without reboot; the configured initial value applies again on reboot.
 - `PUT /api/wifi` — JSON `{"ssid":"network","password":"secret"}`; saves and reboots.
+
+For `PUT /api/wifi`, `{"ssid":"current-network","password":""}` keeps the saved password when the SSID is unchanged. Send `{"ssid":"open-network","open_network":true}` to clear the password explicitly.
 
 Supported devices: push button, single LED, 3.3 V active buzzer module, 3.3 V relay module, 3.3 V PIR module, capacitive analog soil moisture sensor, DHT22/AM2302, DS18B20, SHT30/SHT31, TMP102, and TCA9548A I²C multiplexer. A multiplexer has configurable names and notes for its eight downstream SD/SC channel pairs. The firmware reads sensors using its GPIO, ADC, MicroPython DHT/OneWire drivers, or I²C. No sensor type is inferred from a wire. Sensors that are not physically attached show a read error rather than a fabricated value. GPIO is 3.3 V logic; do not connect 5 V to it. Resistor guidance depends on whether your breakout already has pull-ups or a series resistor.
 
