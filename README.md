@@ -9,18 +9,20 @@ The local site and JSON API require no authentication. Anyone on the same reacha
 ## Install
 
 1. Put the Pico 2 W into BOOTSEL mode. Flash the **RPI_PICO2_W** MicroPython UF2 from the [official board download](https://micropython.org/download/RPI_PICO2_W/).
-2. Copy `boot.py`, `main.py`, `app.py`, `devices.py`, `index.html`, and `ui.js` to the MicroPython filesystem with `mpremote` or Thonny.
+2. Copy `boot.py`, `main.py`, `app.py`, `devices.py`, `index.html`, `ui.js`, and `api-docs.js` to the MicroPython filesystem with `mpremote` or Thonny.
 3. Reset the board. Join `PlantMontitor` and browse `http://192.168.4.1`.
 
-`mpremote` example: `py -m mpremote connect auto fs cp boot.py main.py app.py devices.py index.html ui.js : + reset`
+`mpremote` example: `py -m mpremote connect auto fs cp boot.py main.py app.py devices.py index.html ui.js api-docs.js : + reset`
 
 ## Web interface
 
 The **Board & devices** screen draws all 40 physical header pins in board order. Click a pin for its note, mode, and attached device roles. Add a supported device from the searchable catalog and assign its signal, power, and ground connections. Device-specific wiring and resistor color bands appear before saving. Device configuration is saved to Pico flash and applied after a reboot; notes save immediately. Configured outputs can be switched live.
 
-The TCA9548A I²C multiplexer entry lets you select the Pico's upstream SDA/SCL pins, power and ground, its 7-bit address (112–119), and a name/note for each of its eight downstream channel pairs. Click its device card to edit the wiring and channels. Multiplexer channels currently appear as paths in the I²C Explorer; catalog sensor readings on downstream channels are not yet assigned through the device editor.
+The TCA9548A I²C multiplexer entry lets you select the Pico's upstream SDA/SCL pins, power and ground, its 7-bit address (112–119), and a name/note for each of its eight downstream channel pairs. Click its device card to edit the wiring and channels. SHT30/SHT31 and TMP102 sensors can be assigned to a configured multiplexer channel, including multiple sensors with the same I²C address on different channels. Their device API readings select the channel automatically.
 
 The **Apps** screen contains an I²C Explorer. It lists configured Pico buses and multiplexer channels, scans a selected path, and reads or writes 1–32 bytes at a decimal address. A register number is optional. Hex input such as `24 00` writes two bytes. Requests use the selected multiplexer channel and take effect immediately; consult the target device's datasheet before writing.
+
+The **API** screen has searchable example requests and responses for Wi-Fi changes, pin and device configuration, buttons, LEDs, multiplexer sensors, and raw I²C operations. Each example includes a short wiring note. Replace its example IDs, network names, and readings with your own values.
 
 ## JSON API
 
@@ -28,6 +30,7 @@ The **Apps** screen contains an I²C Explorer. It lists configured Pico buses an
 - `GET /api/pins` — every exposed GPIO.
 - `GET /api/pins/4` — one current reading with GP and physical header number, note, configuration and unit.
 - `PUT /api/pins/4` — JSON such as `{"mode":"button","pull":"up","note":"Seed bay 2"}`. Saves to flash and reboots to apply the pin mode.
+- `PUT /api/pins/14/value` — `{"value":1}` or `{"value":0}` for a pin already configured as `output`. Changes the live state without reboot; the configured initial value applies again on reboot.
 - `PUT /api/wifi` — JSON `{"ssid":"network","password":"secret"}`; saves and reboots.
 
 Supported devices: push button, single LED, 3.3 V active buzzer module, 3.3 V relay module, 3.3 V PIR module, capacitive analog soil moisture sensor, DHT22/AM2302, DS18B20, SHT30/SHT31, TMP102, and TCA9548A I²C multiplexer. A multiplexer has configurable names and notes for its eight downstream SD/SC channel pairs. The firmware reads sensors using its GPIO, ADC, MicroPython DHT/OneWire drivers, or I²C. No sensor type is inferred from a wire. Sensors that are not physically attached show a read error rather than a fabricated value. GPIO is 3.3 V logic; do not connect 5 V to it. Resistor guidance depends on whether your breakout already has pull-ups or a series resistor.
@@ -47,6 +50,8 @@ Device API:
 - `POST /api/i2c/write` — `{"bus":"mux:3:0","address":68,"register":0,"data":[36,0]}`; omit or set `register` to `null` for a raw write.
 
 `direct:4` refers to an I²C bus using GP4/GP5. `mux:3:0` refers to channel 0 of configured device ID 3. Call `GET /api/i2c/buses` to discover valid paths. I²C read results include `data` as decimal bytes and `hex` as an uppercase string; scan results include decimal `addresses`. Failed hardware transfers return HTTP 400 with an `error` message.
+
+To assign a sensor to a mux channel, include its upstream Pico SDA/SCL pins and a `bus` path in the device request. For example, after adding mux ID `6` on GP4/GP5, `POST /api/devices` with `{"type":"sht30","name":"Seed bay 1","note":"Air","pins":{"SDA":6,"SCL":7,"VCC":36,"GND":8},"bus":"mux:6:0","address":68}`. The sensor's SDA/SCL wires go to mux `SD0`/`SC0`; `SDA`/`SCL` in JSON identify the mux's upstream Pico bus. Read the assigned sensor with `GET /api/devices/<id>`. Remove its assigned sensors before deleting the multiplexer.
 
 ## Optional Tailscale access
 

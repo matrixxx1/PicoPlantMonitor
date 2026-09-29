@@ -56,6 +56,42 @@ class DeviceValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'eight'):
             devices.validate(mux, [sensor], {})
 
+    def test_same_address_on_separate_mux_channels(self):
+        mux = assignment('tca9548a', {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 8}, '6', 112)
+        mux['channels'] = [{'name': '', 'note': ''} for _ in range(8)]
+        first = assignment('sht30', {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 8}, '7', 68)
+        first['bus'] = 'mux:6:0'
+        second = assignment('sht30', {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 8}, '8', 68)
+        second['bus'] = 'mux:6:1'
+        self.assertTrue(devices.validate(first, [mux], {}))
+        self.assertTrue(devices.validate(second, [mux, first], {}))
+        second['bus'] = 'mux:6:0'
+        with self.assertRaisesRegex(ValueError, 'address already used'):
+            devices.validate(second, [mux, first], {})
+        second['bus'] = 'mux:6:8'
+        with self.assertRaisesRegex(ValueError, 'channel 0–7'):
+            devices.validate(second, [mux, first], {})
+
+    def test_mux_sensor_selects_channel_before_read(self):
+        class FakeBus:
+            def __init__(self):
+                self.writes = []
+
+            def writeto(self, address, data):
+                self.writes.append((address, data))
+
+        mux = assignment('tca9548a', {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 8}, '6', 112)
+        sensor = assignment('sht30', {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 8}, '7', 68)
+        sensor['bus'] = 'mux:6:2'
+        previous = devices.configured_devices[:]
+        try:
+            devices.configured_devices[:] = [mux, sensor]
+            bus = FakeBus()
+            devices.select_device_bus(sensor, bus)
+            self.assertEqual(bus.writes, [(112, b'\x00'), (112, b'\x04')])
+        finally:
+            devices.configured_devices[:] = previous
+
 
 if __name__ == '__main__':
     unittest.main()

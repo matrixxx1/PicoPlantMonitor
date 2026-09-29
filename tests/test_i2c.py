@@ -1,6 +1,7 @@
 import sys
 import types
 import unittest
+import io
 
 sys.modules.setdefault('machine', types.SimpleNamespace())
 sys.modules.setdefault('network', types.SimpleNamespace())
@@ -48,6 +49,55 @@ class I2cRoutingTests(unittest.TestCase):
     def test_invalid_path_rejected(self):
         with self.assertRaisesRegex(ValueError, '0–7'):
             app.i2c_bus('mux:3:8')
+
+    def test_mux_sensor_record_and_pin_annotations(self):
+        sensor = {'type': 'sht30', 'name': 'Bay sensor', 'note': 'Bay 1',
+                  'pins': {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 8},
+                  'bus': 'mux:3:0', 'address': 68}
+        record = app.device_record(sensor, '7')
+        self.assertEqual(record['bus'], 'mux:3:0')
+        app.config['devices'].append(record)
+        self.assertFalse(any(item['id'] == '7' for item in app.connections_for_header(6)))
+        self.assertTrue(any(item['id'] == '7' for item in app.connections_for_header(36)))
+
+    def test_live_output_endpoint(self):
+        class FakePin:
+            state = 0
+
+            def value(self, value=None):
+                if value is not None:
+                    self.state = value
+                return self.state
+
+        class FakeClient:
+            def __init__(self, request):
+                self.source = io.BytesIO(request)
+                self.output = io.BytesIO()
+
+            def readline(self):
+                return self.source.readline()
+
+            def read(self, count):
+                return self.source.read(count)
+
+            def write(self, data):
+                self.output.write(data)
+
+        app.config['pins']['14'] = {'mode': 'output', 'value': 0, 'note': 'Desk LED'}
+        old = app.pins.get(14)
+        app.pins[14] = FakePin()
+        try:
+            body = b'{"value":1}'
+            client = FakeClient(b'PUT /api/pins/14/value HTTP/1.1\r\nContent-Length: 11\r\n\r\n' + body)
+            app.handle(client)
+            response = client.output.getvalue()
+            self.assertIn(b'200 OK', response)
+            self.assertIn(b'"value": 1', response)
+        finally:
+            if old is None:
+                app.pins.pop(14)
+            else:
+                app.pins[14] = old
 
 
 if __name__ == '__main__':

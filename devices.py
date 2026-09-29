@@ -89,6 +89,7 @@ CATALOG = {
 instances = {}
 shared_buses = {}
 last_read = {}
+configured_devices = []
 
 
 def gpio_of(device, role):
@@ -98,6 +99,10 @@ def gpio_of(device, role):
 def address_of(device):
     default = {'sht30': 68, 'tca9548a': 112}.get(device['type'], 72)
     return int(device.get('address', default))
+
+
+def bus_of(device):
+    return device.get('bus') or 'direct:%d' % gpio_of(device, 'SDA')
 
 
 def validate(device, others, legacy_pins):
@@ -145,6 +150,22 @@ def validate(device, others, legacy_pins):
             raise ValueError('TMP102 address must be 72–75')
         if kind == 'tca9548a' and not 112 <= address_of(device) <= 119:
             raise ValueError('TCA9548A address must be 112–119')
+        path = bus_of(device)
+        if kind == 'tca9548a' and path != 'direct:%d' % sda:
+            raise ValueError('A multiplexer must connect directly to the Pico')
+        if kind in ('sht30', 'tmp102'):
+            if path.startswith('direct:'):
+                if path != 'direct:%d' % sda:
+                    raise ValueError('Direct I2C path does not match the selected pins')
+            elif path.startswith('mux:'):
+                parts = path.split(':')
+                if len(parts) != 3 or not parts[2].isdigit() or not 0 <= int(parts[2]) < 8:
+                    raise ValueError('Choose multiplexer channel 0–7')
+                mux = next((item for item in others if item.get('id') == parts[1] and item.get('type') == 'tca9548a'), None)
+                if mux is None or gpio_of(mux, 'SDA') != sda:
+                    raise ValueError('Selected multiplexer and Pico I2C pins do not match')
+            else:
+                raise ValueError('Choose a configured I2C path')
     if kind == 'tca9548a':
         channels = device.get('channels')
         if not isinstance(channels, list) or len(channels) != 8:
@@ -177,7 +198,9 @@ def validate(device, others, legacy_pins):
             if gpio_of(other, 'SDA') != gpio_of(device, 'SDA'):
                 raise ValueError('I2C pin pair conflict')
             if address_of(other) == address_of(device):
-                raise ValueError('I2C address already used on this bus')
+                other_path, this_path = bus_of(other), bus_of(device)
+                if other_path == this_path or other_path.startswith('direct:') or this_path.startswith('direct:'):
+                    raise ValueError('I2C address already used on this bus')
     return True
 
 
@@ -185,6 +208,7 @@ def setup(all_devices):
     instances.clear()
     shared_buses.clear()
     last_read.clear()
+    configured_devices[:] = all_devices
     for device in all_devices:
         kind = device['type']
         ident = device['id']
@@ -222,6 +246,18 @@ def crc8(data):
     return crc
 
 
+def select_device_bus(device, bus):
+    sda = gpio_of(device, 'SDA')
+    path = bus_of(device)
+    for item in configured_devices:
+        if item['type'] == 'tca9548a' and gpio_of(item, 'SDA') == sda:
+            bus.writeto(address_of(item), b'\x00')
+    if path.startswith('mux:'):
+        _, ident, channel = path.split(':')
+        mux = next(item for item in configured_devices if item['id'] == ident and item['type'] == 'tca9548a')
+        bus.writeto(address_of(mux), bytes((1 << int(channel),)))
+
+
 def reading(device):
     ident = device['id']
     kind = device['type']
@@ -250,6 +286,7 @@ def reading(device):
             time.sleep_ms(750)
             result = {'temperature_c': sensor.read_temp(roms[0])}
         elif kind == 'sht30':
+            select_device_bus(device, sensor)
             addr = address_of(device)
             sensor.writeto(addr, b'\x24\x00')
             time.sleep_ms(20)
@@ -259,6 +296,7 @@ def reading(device):
             result = {'temperature_c': round(-45 + 175 * ((raw[0] << 8) | raw[1]) / 65535, 2),
                       'humidity_percent': round(100 * ((raw[3] << 8) | raw[4]) / 65535, 2)}
         elif kind == 'tmp102':
+            select_device_bus(device, sensor)
             raw = sensor.readfrom_mem(address_of(device), 0, 2)
             value = (raw[0] << 4) | (raw[1] >> 4)
             if value & 0x800:

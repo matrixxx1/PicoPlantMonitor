@@ -131,6 +131,8 @@ def connections_for_header(header):
     attached = []
     for device in config['devices']:
         for role, physical in device['pins'].items():
+            if role in ('SDA', 'SCL') and str(device.get('bus', '')).startswith('mux:'):
+                continue
             if int(physical) == header:
                 attached.append({'id': device['id'], 'name': device['name'],
                                  'type': device['type'], 'role': role})
@@ -160,6 +162,8 @@ def device_record(value, ident):
         record['channels'] = [{'name': str(item.get('name', '')),
                                'note': str(item.get('note', ''))}
                               for item in value['channels']]
+    elif value['type'] in ('sht30', 'tmp102'):
+        record['bus'] = devices.bus_of(value)
     return record
 
 
@@ -367,6 +371,9 @@ def handle(client):
     elif path == '/ui.js':
         with open('ui.js', 'rb') as f:
             response(client, '200 OK', f.read(), 'application/javascript')
+    elif path == '/api-docs.js':
+        with open('api-docs.js', 'rb') as f:
+            response(client, '200 OK', f.read(), 'application/javascript')
     elif path == '/api/status' and method == 'GET':
         send_json(client, '200 OK', {'connected': bool(station and station.isconnected()),
                   'ip': station.ifconfig()[0] if station and station.isconnected() else AP_IP,
@@ -438,6 +445,10 @@ def handle(client):
         elif len(parts) == 4 and method == 'GET':
             send_json(client, '200 OK', devices.view(item))
         elif len(parts) == 4 and method == 'DELETE':
+            if any(str(other.get('bus', '')).startswith('mux:%s:' % ident)
+                   for other in config['devices']):
+                send_json(client, '400 Bad Request', {'error': 'Remove devices on this multiplexer first'})
+                return
             config['devices'] = [device for device in config['devices'] if device['id'] != ident]
             save_and_reboot(client, {'deleted': True, 'rebooting': True})
         elif len(parts) == 4 and method == 'PUT':
@@ -446,6 +457,12 @@ def handle(client):
                 new['id'] = ident
                 devices.validate(new, config['devices'], config['pins'])
                 replacement = device_record(new, ident)
+                if replacement['type'] == 'tca9548a':
+                    candidates = [replacement if device['id'] == ident else device
+                                  for device in config['devices']]
+                    for dependent in candidates:
+                        if str(dependent.get('bus', '')).startswith('mux:%s:' % ident):
+                            devices.validate(dependent, [item for item in candidates if item['id'] != dependent['id']], config['pins'])
                 config['devices'] = [replacement if device['id'] == ident else device
                                      for device in config['devices']]
                 save_and_reboot(client, {'saved': True, 'rebooting': True, 'id': ident})
@@ -463,6 +480,18 @@ def handle(client):
                 raise ValueError('Note too long')
             config['pins'].setdefault(str(n), {'mode': 'unused'})['note'] = note
             save()
+            send_json(client, '200 OK', read_pin(n))
+        except (ValueError, TypeError, KeyError) as exc:
+            send_json(client, '400 Bad Request', {'error': str(exc)})
+    elif path.startswith('/api/pins/') and path.endswith('/value') and method == 'PUT':
+        try:
+            n = int(path.split('/')[3])
+            if n not in GPIO or pin_config(n).get('mode') != 'output':
+                raise ValueError('Pin must be configured as an output')
+            value = int(json.loads(body)['value'])
+            if value not in (0, 1):
+                raise ValueError('Output value must be 0 or 1')
+            pins[n].value(value)
             send_json(client, '200 OK', read_pin(n))
         except (ValueError, TypeError, KeyError) as exc:
             send_json(client, '400 Bad Request', {'error': str(exc)})
