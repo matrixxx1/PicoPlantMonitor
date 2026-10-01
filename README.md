@@ -2,7 +2,7 @@
 
 ## Printable Pico 2 W case
 
-An [open case STL and dimensioned preview](hardware/pico2w_case/README.md) are included. The design leaves the USB end, pins, BOOTSEL button, and RUN pin accessible, aligns with the Pico's four mounting holes, and adds a wide side flange with four external M3 mounting holes.
+A [two-piece printable case with separate base and lid STLs](hardware/pico2w_case/README.md) is included. Four external M3 holes surround the Pico, with extra space on one side. The design leaves access to USB, pins, BOOTSEL, and the wireless antenna area.
 
 MicroPython firmware for Raspberry Pi Pico 2 W. It hosts a mobile-friendly board view, a device catalog, a persistent pin editor, and JSON endpoints for readings and I²C operations. On first boot, the Pico creates the password-free Wi-Fi access point **PlantMontitor**. Connecting should trigger a captive-portal setup window on devices that support one. If it does not appear, open `http://192.168.4.1` in a browser. Save your LAN SSID and password. After reboot, open the Pico's DHCP address on your LAN. If the saved network is unavailable at boot, the setup AP returns after roughly 15 seconds. It also returns if an established connection drops.
 
