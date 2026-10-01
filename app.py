@@ -6,6 +6,7 @@ import os
 import socket
 import time
 import devices
+import auto_post
 
 CONFIG = 'config.json'
 GPIO = list(range(23)) + [26, 27, 28]
@@ -164,6 +165,10 @@ def device_record(value, ident):
                               for item in value['channels']]
     elif value['type'] in ('sht30', 'tmp102'):
         record['bus'] = devices.bus_of(value)
+    if value['type'] in auto_post.SENSOR_TYPES:
+        record['auto_post'] = auto_post.settings(value, value['type'])
+    else:
+        auto_post.settings(value, value['type'])
     return record
 
 
@@ -551,6 +556,11 @@ def run():
         except Exception as exc:
             print('Pin', n, 'configuration error:', exc)
     devices.setup(config['devices'])
+    auto_post.last_attempt.clear()
+    schedule_start = time.ticks_ms()
+    for item in config['devices']:
+        if item.get('auto_post', {}).get('enabled'):
+            auto_post.last_attempt[item['id']] = schedule_start
     connect_wifi()
     server = socket.socket()
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -561,7 +571,13 @@ def run():
     dns.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     dns.bind(('0.0.0.0', 53))
     dns.settimeout(0.01)
+    last_auto_check = time.ticks_ms()
     while True:
+        now = time.ticks_ms()
+        if time.ticks_diff(now, last_auto_check) >= 60000:
+            last_auto_check = now
+            auto_post.check(config['devices'], devices.reading,
+                            bool(station and station.isconnected()), now)
         if access_point and access_point.active():
             try:
                 packet, address = dns.recvfrom(512)

@@ -9,10 +9,10 @@ The local site and JSON API require no authentication. Anyone on the same reacha
 ## Install
 
 1. Put the Pico 2 W into BOOTSEL mode. Flash the **RPI_PICO2_W** MicroPython UF2 from the [official board download](https://micropython.org/download/RPI_PICO2_W/).
-2. Copy `boot.py`, `main.py`, `app.py`, `devices.py`, `index.html`, `ui.js`, and `api-docs.js` to the MicroPython filesystem with `mpremote` or Thonny.
+2. Copy `boot.py`, `main.py`, `app.py`, `devices.py`, `auto_post.py`, `index.html`, `ui.js`, and `api-docs.js` to the MicroPython filesystem with `mpremote` or Thonny.
 3. Reset the board. Join `PlantMontitor` and browse `http://192.168.4.1`.
 
-`mpremote` example: `py -m mpremote connect auto fs cp boot.py main.py app.py devices.py index.html ui.js api-docs.js : + reset`
+`mpremote` example: `py -m mpremote connect auto fs cp boot.py main.py app.py devices.py auto_post.py index.html ui.js api-docs.js : + reset`
 
 ## Web interface
 
@@ -25,6 +25,8 @@ The **Apps** screen contains an I²C Explorer. It lists configured Pico buses an
 The **API** screen has searchable example requests and responses for Wi-Fi changes, pin and device configuration, buttons, LEDs, multiplexer sensors, and raw I²C operations. Each example includes a short wiring note; hardware examples show illustrated Pico, wire, component, and physical-pin connections. LED examples include a 330 Ω resistor and its color bands. I²C examples explain optional 4.7 kΩ pull-ups when boards lack them. Replace example IDs, network names, and readings with your own values.
 
 The **Wifi** screen holds network setup. It shows the saved SSID, lets you enter a new network, and has an explicit open-network option. Leaving the password blank for the same SSID keeps the existing saved password; the password is never returned by the API.
+
+Each **sensor** has an Auto post checkbox (off by default), a 1-minute, 1-hour, 13-hour, or 24-hour interval, and a destination URL. For example, an SHT30 with `temperature_c: 22.5` and `humidity_percent: 48.1` can use `https://example.com/reading?temperature_c={temperature_c}&humidity_percent={humidity_percent}`. The Pico sends an HTTP POST to `/reading?temperature_c=22.5&humidity_percent=48.1` with an empty body. Placeholders use the sensor reading field names, such as `{temperature_c}` and `{humidity_percent}`. The Pico URL-encodes substituted values. It checks schedules once a minute while connected to Wi-Fi. The first send is due one interval after boot; a reboot starts that interval again. A failed sensor reading skips the send, and a failed delivery is logged on the Pico serial console; neither is queued for retry. Temperature readings display Fahrenheit beside Celsius on the site; distance readings display inches beside centimeters or millimeters when such a sensor is available.
 
 ## JSON API
 
