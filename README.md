@@ -16,7 +16,7 @@ The local site and JSON API require no authentication. Anyone on the same reacha
 
 ## Web interface
 
-The **Board & devices** screen draws all 40 physical header pins in board order. Top View and Bottom View mirror the left and right pin banks while keeping USB at the top. Click a pin for its note, mode, and attached device roles. The top-view drawing includes a **Reset (web)** control between USB and the RP2350 chip; it restarts the firmware after confirmation. The physical button under USB is BOOTSEL, not reset. A separate hardware reset switch can be wired between RUN and GND. Add a supported device from the searchable catalog and assign its signal, power, and ground connections. Device-specific wiring and resistor color bands appear before saving. Device configuration is saved to Pico flash and applied after a reboot; notes save immediately. Configured outputs can be switched live. Device readings refresh every 10 seconds while the board screen is visible, and **Refresh readings** gets a new reading immediately.
+The **Board & devices** screen draws all 40 physical header pins in board order. Top View and Bottom View mirror the left and right pin banks while keeping USB at the top. Click a pin for its note, mode, and attached device roles. The top-view drawing includes a **Reset (web)** control between USB and the RP2350 chip; it restarts the firmware after confirmation. The physical button under USB is BOOTSEL, not reset. A separate hardware reset switch can be wired between RUN and GND. Add a supported device from the searchable catalog and assign its signal, power, and ground connections. Device-specific wiring and resistor color bands appear before saving. Device configuration is saved to Pico flash and applied after a reboot; notes save immediately. Configured outputs can be switched live. Device readings refresh every 10 seconds while the board screen is visible. **Refresh readings** updates all devices, while **Refresh now** on a sensor card forces a new measurement for that sensor, bypassing its short reading cache.
 
 The TCA9548A I²C multiplexer entry lets you select the Pico's upstream SDA/SCL pins, power and ground, its 7-bit address (112–119), and a name/note for each of its eight downstream channel pairs. Click its device card to edit the wiring and channels. SHT30/SHT31 and TMP102 sensors can be assigned to a configured multiplexer channel, including multiple sensors with the same I²C address on different channels. Their device API readings select the channel automatically.
 
@@ -50,6 +50,7 @@ Device API:
 - `GET /api/catalog` — supported types, descriptions, wiring roles and resistor guidance.
 - `GET /api/header` — all 40 physical header pins and assigned device roles.
 - `GET /api/devices` and `GET /api/devices/1` — device configuration and current reading.
+- `POST /api/devices/1/refresh` — force a new reading for one sensor and return its device record. This bypasses the sensor reading cache without rebooting.
 - `POST /api/devices`, `PUT /api/devices/1`, `DELETE /api/devices/1` — manage a device; saves and reboots.
 - `PUT /api/devices/1/value` — `{"value":1}` or `{"value":0}` for LED, buzzer or relay module output. This changes the live state; reboot returns outputs to off.
 - `PUT /api/pins/4/note` — `{"note":"Seed bay 2"}` to update a GP note without reboot.

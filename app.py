@@ -453,6 +453,12 @@ def handle(client):
         item = device_by_id(ident)
         if item is None:
             send_json(client, '404 Not Found', {'error': 'Device not found'})
+        elif len(parts) == 5 and parts[4] == 'refresh' and method == 'POST':
+            if item['type'] not in auto_post.SENSOR_TYPES:
+                send_json(client, '400 Bad Request', {'error': 'Refresh now is only available for sensors'})
+            else:
+                devices.last_read.pop(ident, None)
+                send_json(client, '200 OK', devices.view(item))
         elif len(parts) == 5 and parts[4] == 'value' and method == 'PUT':
             try:
                 if item['type'] not in ('led', 'active_buzzer', 'relay_module'):
