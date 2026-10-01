@@ -16,7 +16,7 @@ The local site and JSON API require no authentication. Anyone on the same reacha
 
 ## Web interface
 
-The **Board & devices** screen draws all 40 physical header pins in board order. Click a pin for its note, mode, and attached device roles. Add a supported device from the searchable catalog and assign its signal, power, and ground connections. Device-specific wiring and resistor color bands appear before saving. Device configuration is saved to Pico flash and applied after a reboot; notes save immediately. Configured outputs can be switched live.
+The **Board & devices** screen draws all 40 physical header pins in board order. Top View and Bottom View mirror the left and right pin banks while keeping USB at the top. Click a pin for its note, mode, and attached device roles. The top-view drawing includes a **Reset (web)** control between USB and the RP2350 chip; it restarts the firmware after confirmation. The physical button under USB is BOOTSEL, not reset. A separate hardware reset switch can be wired between RUN and GND. Add a supported device from the searchable catalog and assign its signal, power, and ground connections. Device-specific wiring and resistor color bands appear before saving. Device configuration is saved to Pico flash and applied after a reboot; notes save immediately. Configured outputs can be switched live.
 
 The TCA9548A I²C multiplexer entry lets you select the Pico's upstream SDA/SCL pins, power and ground, its 7-bit address (112–119), and a name/note for each of its eight downstream channel pairs. Click its device card to edit the wiring and channels. SHT30/SHT31 and TMP102 sensors can be assigned to a configured multiplexer channel, including multiple sensors with the same I²C address on different channels. Their device API readings select the channel automatically.
 
@@ -31,6 +31,7 @@ Each **sensor** has an Auto post checkbox (off by default), a 1-minute, 1-hour, 
 ## JSON API
 
 - `GET /api/status` — network state, SSID, current IP.
+- `POST /api/reboot` — restart the Pico firmware without changing saved settings.
 - `GET /api/pins` — every exposed GPIO.
 - `GET /api/pins/4` — one current reading with GP and physical header number, note, configuration and unit.
 - `PUT /api/pins/4` — JSON such as `{"mode":"button","pull":"up","note":"Seed bay 2"}`. Saves to flash and reboots to apply the pin mode.
@@ -41,6 +42,8 @@ For `PUT /api/wifi`, `{"ssid":"current-network","password":""}` keeps the saved 
 
 Supported devices: push button, single LED, 3.3 V active buzzer module, 3.3 V relay module, 3.3 V PIR module, capacitive analog soil moisture sensor, DHT22/AM2302, DS18B20, SHT30/SHT31, TMP102, and TCA9548A I²C multiplexer. A multiplexer has configurable names and notes for its eight downstream SD/SC channel pairs. The firmware reads sensors using its GPIO, ADC, MicroPython DHT/OneWire drivers, or I²C. No sensor type is inferred from a wire. Sensors that are not physically attached show a read error rather than a fabricated value. GPIO is 3.3 V logic; do not connect 5 V to it. Resistor guidance depends on whether your breakout already has pull-ups or a series resistor.
 
+
+Sensor cards show specific troubleshooting suggestions when a reading fails. For I²C `EIO`, check the displayed SDA/SCL physical pins, 3V3 and ground, then scan that bus in **Apps → I²C Explorer**. An empty scan means nothing answered; check the sensor address, connections and pull-ups before changing firmware settings. A bare I²C bus may need 4.7 kΩ pull-ups from SDA and SCL to 3V3, while many breakouts already have them. DHT22 timeouts suggest checking its DATA line and a 10 kΩ pull-up if the sensor is bare. DS18B20 requires a 4.7 kΩ DATA pull-up. CRC errors suggest checking wiring quality and cable length. These are diagnostic suggestions, not proof of a specific fault.
 
 Device API:
 

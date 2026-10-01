@@ -2,6 +2,7 @@
 const examples = [
   {group:'Network',title:'Check connection',method:'GET',path:'/api/status',response:{connected:true,ip:'192.168.1.42',ssid:'HomeWiFi',setup_ap:false},wire:'Power the Pico by USB; no external wiring is needed.'},
   {group:'Network',title:'Change the Wi-Fi network',method:'PUT',path:'/api/wifi',body:{ssid:'NewWiFi',password:'example-password'},response:{saved:true,rebooting:true},wire:'No external wiring. Reconnect using the Pico’s new DHCP address after reboot.'},
+  {group:'Network',title:'Restart the Pico',method:'POST',path:'/api/reboot',response:{rebooting:true},wire:'Power the Pico by USB. This restarts firmware without changing saved configuration; the web page briefly disconnects.'},
   {group:'Pins',title:'List GPIO readings',method:'GET',path:'/api/pins',response:[{pin:14,physical_pin:19,note:'Desk LED',configuration:{mode:'output',value:0},value:0,unit:null,devices:[]}],excerpt:true,wire:'Example shown for GP14; configure and wire each pin for the value you want to read.'},
   {group:'Pins',title:'Read one GPIO',method:'GET',path:'/api/pins/14',response:{pin:14,physical_pin:19,note:'Desk LED',configuration:{mode:'output',value:0},value:0,unit:null,devices:[]},wire:'An LED can use GP14 (physical 19) → 330 Ω → LED anode; LED cathode → GND.'},
   {group:'Pins',title:'Configure an output pin',method:'PUT',path:'/api/pins/14',body:{mode:'output',value:0,note:'Desk LED'},response:{saved:true,rebooting:true,pin:14},wire:'Wire GP14 → 330 Ω resistor → LED anode; LED cathode → a Pico GND pin. Save reboots the Pico.'},

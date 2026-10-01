@@ -398,6 +398,10 @@ def handle(client):
                   'ip': station.ifconfig()[0] if station and station.isconnected() else AP_IP,
                   'ssid': config.get('wifi', {}).get('ssid', ''),
                   'setup_ap': bool(access_point and access_point.active())})
+    elif path == '/api/reboot' and method == 'POST':
+        send_json(client, '200 OK', {'rebooting': True})
+        time.sleep(0.5)
+        machine.reset()
     elif path == '/api/pins' and method == 'GET':
         send_json(client, '200 OK', [read_pin(n) for n in GPIO])
     elif path == '/api/header' and method == 'GET':
