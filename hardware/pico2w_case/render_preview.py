@@ -5,7 +5,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Rectangle
+from matplotlib.patches import Circle, FancyBboxPatch, Rectangle
 import trimesh
 
 HERE = Path(__file__).resolve().parent
@@ -38,15 +38,32 @@ base.text(33, 0, 'EXTRA-WIDE\nSIDE', ha='center', va='center',
 
 lid.set_title('Separate lid · printed roof down, posts up')
 lid.add_patch(Rectangle((-31, -39), 86, 78, facecolor='#326d58'))
+# Full perimeter walls, with a very large 50 mm USB opening at the front.
+lid.plot([-31, -31], [-39, 39], color='#102f24', linewidth=5)
+lid.plot([55, 55], [-39, 39], color='#102f24', linewidth=5)
+lid.plot([-31, 55], [39, 39], color='#102f24', linewidth=5)
+lid.plot([-31, -13], [-39, -39], color='#102f24', linewidth=5)
+lid.plot([37, 55], [-39, -39], color='#102f24', linewidth=5)
 for x in (-11.75, 11.75):
     for centre, length in ((-9.5, 33), (17.5, 17)):
         lid.add_patch(Rectangle((x - 6.25, centre - length / 2), 12.5,
                                 length, facecolor='#fff'))
 lid.add_patch(Rectangle((-12.5, -39), 25, 29, facecolor='#fff'))
 lid.add_patch(Rectangle((-7.5, 10), 15, 16, facecolor='#fff'))
-lid.text(0, -23, 'USB +\nBOOTSEL', ha='center', va='center', fontsize=8)
+lid.text(12, -34, '50 mm USB + CABLE OPENING', ha='center', va='center', fontsize=7)
 lid.text(0, 18, 'ANTENNA', ha='center', va='center', fontsize=7)
 lid.text(0, -2, 'CHIP COVER', ha='center', va='center', fontsize=7)
+# Integrated OLED mount on the wide side. Dashed outline is the breakout PCB.
+lid.add_patch(Rectangle((20.35, -21.9), 27.3, 27.8, fill=False,
+                        edgecolor='#f5a623', linewidth=2, linestyle='--'))
+for x in (34 - 11.85, 34 + 11.85):
+    for y in (-8 - 11.85, -8 + 11.85):
+        lid.add_patch(FancyBboxPatch((x - 2.25, y - 1.25), 4.5, 2.5,
+                                    boxstyle='round,pad=0,rounding_size=1.25',
+                                    facecolor='#fff'))
+lid.add_patch(Rectangle((27, .85), 14, 6, facecolor='#fff'))
+lid.text(34, -8, 'SSD1306', ha='center', va='center', fontsize=8)
+lid.text(34, 3.85, 'HEADER / WIRE', ha='center', va='center', fontsize=4.5)
 
 for ax, show_posts in ((base, False), (lid, True)):
     for x in (-24, 45):
@@ -68,20 +85,20 @@ for y in (-23.5, 23.5):
                              facecolor='#12513c'))
 side.add_patch(Rectangle((-25.5, 12.5), 51, 1, facecolor='#f5a623'))
 for y in (-30, 30):
-    side.add_patch(Rectangle((y - 5.2, 4.5), 10.4, 24.5,
+    side.add_patch(Rectangle((y - 5.2, 4.5), 10.4, 12.25,
                              facecolor='#174936', alpha=.6))
-side.add_patch(Rectangle((-39, 29), 78, 2.4,
+side.add_patch(Rectangle((-39, 16.75), 78, 2.4,
                          facecolor='#326d58', alpha=.75))
-side.text(0, 21, '15.5 mm above PCB', ha='center', fontsize=9)
+side.text(0, 14.5, '3.25 mm above PCB', ha='center', fontsize=9)
 side.text(0, 7, '8 mm below PCB', ha='center', fontsize=9)
 side.annotate('USB cable exits here', xy=(-32, 15), xytext=(-60, 25),
               arrowprops={'arrowstyle': '->'}, fontsize=9)
 side.set_xlim(-69, 44)
-side.set_ylim(-1, 35)
+side.set_ylim(-1, 22)
 side.set_aspect(1.4)
 side.set_xlabel('length along board (mm)')
 side.set_ylabel('height (mm)')
 side.grid(alpha=.12)
 
 fig.tight_layout()
-fig.savefig(HERE / 'pico2w_open_case_preview.png', dpi=150)
+fig.savefig(HERE / 'pico2w_case_with_oled_preview.png', dpi=150)

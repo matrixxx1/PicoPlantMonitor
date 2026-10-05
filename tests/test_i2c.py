@@ -99,6 +99,35 @@ class I2cRoutingTests(unittest.TestCase):
             else:
                 app.pins[14] = old
 
+    def test_display_endpoint_returns_latest_oled_output(self):
+        class FakeClient:
+            def __init__(self, request):
+                self.source = io.BytesIO(request)
+                self.output = io.BytesIO()
+
+            def readline(self):
+                return self.source.readline()
+
+            def read(self, count):
+                return self.source.read(count)
+
+            def write(self, data):
+                self.output.write(data)
+
+        previous = devices.last_display_lines
+        devices.last_display_lines = ['Seed bay 1', '', '22.0C / 71.6F',
+                                      'Humidity 55.0%', '', 'Good', '', 'Next [###..]']
+        try:
+            client = FakeClient(b'GET /api/display HTTP/1.1\r\n\r\n')
+            app.handle(client)
+            response = client.output.getvalue()
+            self.assertIn(b'200 OK', response)
+            self.assertIn(b'"width": 128', response)
+            self.assertIn(b'"height": 64', response)
+            self.assertIn(b'"Next [###..]"', response)
+        finally:
+            devices.last_display_lines = previous
+
 
 if __name__ == '__main__':
     unittest.main()

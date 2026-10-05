@@ -1,4 +1,5 @@
 config.json
 *.uf2
 __pycache__/
+.codex-remote-attachments/
 tailnet-proxy/*.exe

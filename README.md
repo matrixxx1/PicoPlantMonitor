@@ -13,10 +13,10 @@ The local site and JSON API require no authentication. Anyone on the same reacha
 ## Install
 
 1. Put the Pico 2 W into BOOTSEL mode. Flash the **RPI_PICO2_W** MicroPython UF2 from the [official board download](https://micropython.org/download/RPI_PICO2_W/).
-2. Copy `boot.py`, `main.py`, `app.py`, `devices.py`, `auto_post.py`, `index.html`, `ui.js`, and `api-docs.js` to the MicroPython filesystem with `mpremote` or Thonny.
+2. Copy `boot.py`, `main.py`, `app.py`, `devices.py`, `auto_post.py`, `ssd1306.py`, `index.html`, `ui.js`, and `api-docs.js` to the MicroPython filesystem with `mpremote` or Thonny.
 3. Reset the board. Join `PlantMontitor` and browse `http://192.168.4.1`.
 
-`mpremote` example: `py -m mpremote connect auto fs cp boot.py main.py app.py devices.py auto_post.py index.html ui.js api-docs.js : + reset`
+`mpremote` example: `py -m mpremote connect auto fs cp boot.py main.py app.py devices.py auto_post.py ssd1306.py index.html ui.js api-docs.js : + reset`
 
 ## Web interface
 
@@ -44,7 +44,9 @@ Each **sensor** has an Auto post checkbox (off by default), a 1-minute, 1-hour, 
 
 For `PUT /api/wifi`, `{"ssid":"current-network","password":""}` keeps the saved password when the SSID is unchanged. Send `{"ssid":"open-network","open_network":true}` to clear the password explicitly.
 
-Supported devices: push button, single LED, 3.3 V active buzzer module, 3.3 V relay module, 3.3 V PIR module, capacitive analog soil moisture sensor, DHT22/AM2302, DS18B20, SHT30/SHT31, TMP102, and TCA9548A I²C multiplexer. A multiplexer has configurable names and notes for its eight downstream SD/SC channel pairs. The firmware reads sensors using its GPIO, ADC, MicroPython DHT/OneWire drivers, or I²C. No sensor type is inferred from a wire. Sensors that are not physically attached show a read error rather than a fabricated value. GPIO is 3.3 V logic; do not connect 5 V to it. Resistor guidance depends on whether your breakout already has pull-ups or a series resistor.
+Supported devices: push button, single LED, 3.3 V active buzzer module, 3.3 V relay module, 3.3 V PIR module, capacitive analog soil moisture sensor, DHT22/AM2302, DS18B20, SHT30/SHT31, TMP102, SSD1306 128×64 I²C OLED, and TCA9548A I²C multiplexer. A multiplexer has configurable names and notes for its eight downstream SD/SC channel pairs. The firmware reads sensors using its GPIO, ADC, MicroPython DHT/OneWire drivers, or I²C. No sensor type is inferred from a wire. Sensors that are not physically attached show a read error rather than a fabricated value. GPIO is 3.3 V logic; do not connect 5 V to it. Resistor guidance depends on whether your breakout already has pull-ups or a series resistor.
+
+The SSD1306 display defaults to address `0x3C` (decimal 60) and rotates through readable sensors every five seconds. Each page shows the sensor's bay name, temperature in both Celsius and Fahrenheit (`xx.xC / yy.yF`), humidity, and a Carolina Reaper condition check. `Good` means 21–32 °C and 50–70% RH; otherwise the page identifies each low or high reading. A five-segment `Next [#####]` doodle counts down once per second before advancing to the next sensor and looping continuously. Wire **blue SDA** to GP4 (physical pin 6), **yellow SCL** to GP5 (pin 7), **red VCC** to 3V3(OUT) (pin 36), and **black GND** to GND (pin 38). Power the display from 3.3 V, not VBUS. These I²C signal pins may be shared with other devices that use different addresses.
 
 
 Sensor cards show specific troubleshooting suggestions when a reading fails. For I²C `EIO`, check the displayed SDA/SCL physical pins, 3V3 and ground, then scan that bus in **Apps → I²C Explorer**. An empty scan means nothing answered; check the sensor address, connections and pull-ups before changing firmware settings. A bare I²C bus may need 4.7 kΩ pull-ups from SDA and SCL to 3V3, while many breakouts already have them. DHT22 timeouts suggest checking its DATA line and a 10 kΩ pull-up if the sensor is bare. DS18B20 requires a 4.7 kΩ DATA pull-up. CRC errors suggest checking wiring quality and cable length. These are diagnostic suggestions, not proof of a specific fault.
@@ -64,6 +66,10 @@ Device API:
 - `POST /api/i2c/write` — `{"bus":"mux:3:0","address":68,"register":0,"data":[36,0]}`; omit or set `register` to `null` for a raw write.
 
 `direct:4` refers to an I²C bus using GP4/GP5. `mux:3:0` refers to channel 0 of configured device ID 3. Call `GET /api/i2c/buses` to discover valid paths. I²C read results include `data` as decimal bytes and `hex` as an uppercase string; scan results include decimal `addresses`. Failed hardware transfers return HTTP 400 with an `error` message.
+
+Device-managed I²C connections use MicroPython `SoftI2C`, so fixed-address sensors can use separate even/odd GPIO pairs beyond the Pico's two hardware-I²C controllers. For example, independent SHT30 sensors at address `0x44` can use GP6/GP7 and GP8/GP9 without colliding.
+
+Every device `reading` object includes `time_of_reading` as an ISO-8601 UTC value, for example `2026-10-01T19:42:10Z`. The Pico synchronizes its clock after connecting to Wi-Fi; if that sync is unavailable, the value reflects the Pico RTC.
 
 To assign a sensor to a mux channel, include its upstream Pico SDA/SCL pins and a `bus` path in the device request. For example, after adding mux ID `6` on GP4/GP5, `POST /api/devices` with `{"type":"sht30","name":"Seed bay 1","note":"Air","pins":{"SDA":6,"SCL":7,"VCC":36,"GND":8},"bus":"mux:6:0","address":68}`. The sensor's SDA/SCL wires go to mux `SD0`/`SC0`; `SDA`/`SCL` in JSON identify the mux's upstream Pico bus. Read the assigned sensor with `GET /api/devices/<id>`. Remove its assigned sensors before deleting the multiplexer.
 

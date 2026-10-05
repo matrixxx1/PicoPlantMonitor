@@ -77,6 +77,14 @@ CATALOG = {
         'wiring': 'SDA → even GP; SCL → next GP; VCC → 3V3; GND → GND. A bare I²C board needs pull-ups on both lines.',
         'resistor': {'ohms': 4700, 'bands': ['yellow', 'violet', 'red', 'gold'],
                      'placement': 'One from SDA to 3V3 and one from SCL to 3V3 if the breakout lacks pull-ups.'}},
+    'ssd1306': {
+        'name': 'SSD1306 128×64 OLED', 'category': 'Displays',
+        'description': 'Four-pin I²C OLED showing live plant-monitor status and sensor readings.',
+        'roles': [('SDA', 'sda'), ('SCL', 'scl'), ('VCC', 'power'), ('GND', 'ground')],
+        'wiring': 'BLUE: SDA → GP4; YELLOW: SCL → GP5; RED: VCC → 3V3; BLACK: GND → GND. Never power this display from VBUS.',
+        'wire_colors': {'SDA': 'blue', 'SCL': 'yellow', 'VCC': 'red', 'GND': 'black'},
+        'defaults': {'SDA': 6, 'SCL': 7, 'VCC': 36, 'GND': 38},
+        'resistor': None},
     'tca9548a': {
         'name': 'TCA9548A I²C multiplexer', 'category': 'Multiplexers',
         'description': 'Adds eight selectable I²C channels for sensors that share an address.',
@@ -90,6 +98,19 @@ instances = {}
 shared_buses = {}
 last_read = {}
 configured_devices = []
+display_cycle_index = 0
+display_countdown_step = 0
+last_display_lines = ['Pico Plant', 'Monitor', '', 'Starting...']
+REAPER_TEMP_MIN_C = 21.0
+REAPER_TEMP_MAX_C = 32.0
+REAPER_HUMIDITY_MIN = 50.0
+REAPER_HUMIDITY_MAX = 70.0
+
+
+def time_of_reading():
+    """Return the Pico RTC time as an ISO-8601 UTC timestamp."""
+    value = time.gmtime()
+    return '%04d-%02d-%02dT%02d:%02d:%02dZ' % value[:6]
 
 
 def gpio_of(device, role):
@@ -97,7 +118,7 @@ def gpio_of(device, role):
 
 
 def address_of(device):
-    default = {'sht30': 68, 'tca9548a': 112}.get(device['type'], 72)
+    default = {'sht30': 68, 'tca9548a': 112, 'ssd1306': 60}.get(device['type'], 72)
     return int(device.get('address', default))
 
 
@@ -150,10 +171,12 @@ def validate(device, others, legacy_pins):
             raise ValueError('TMP102 address must be 72–75')
         if kind == 'tca9548a' and not 112 <= address_of(device) <= 119:
             raise ValueError('TCA9548A address must be 112–119')
+        if kind == 'ssd1306' and address_of(device) not in (60, 61):
+            raise ValueError('SSD1306 address must be 60 or 61')
         path = bus_of(device)
         if kind == 'tca9548a' and path != 'direct:%d' % sda:
             raise ValueError('A multiplexer must connect directly to the Pico')
-        if kind in ('sht30', 'tmp102'):
+        if kind in ('sht30', 'tmp102', 'ssd1306'):
             if path.startswith('direct:'):
                 if path != 'direct:%d' % sda:
                     raise ValueError('Direct I2C path does not match the selected pins')
@@ -181,18 +204,13 @@ def validate(device, others, legacy_pins):
     for other in others:
         if other.get('id') == device.get('id'):
             continue
-        if 'SDA' in pins and 'SDA' in other['pins']:
-            other_sda = gpio_of(other, 'SDA')
-            this_sda = gpio_of(device, 'SDA')
-            if other_sda != this_sda and (other_sda // 2) % 2 == (this_sda // 2) % 2:
-                raise ValueError('I2C controller already uses another pin pair')
         for role, capability in CATALOG[other['type']]['roles']:
             if capability not in ('gpio', 'adc', 'sda', 'scl'):
                 continue
             other_gpio = gpio_of(other, role)
             if other_gpio not in used_gpio:
                 continue
-            shared_i2c = capability in ('sda', 'scl') and kind in ('sht30', 'tmp102', 'tca9548a') and 'SDA' in other['pins'] and 'SDA' in pins
+            shared_i2c = capability in ('sda', 'scl') and kind in ('sht30', 'tmp102', 'tca9548a', 'ssd1306') and 'SDA' in other['pins'] and 'SDA' in pins
             if not shared_i2c:
                 raise ValueError('GP%d is already used by %s' % (other_gpio, other['name']))
             if gpio_of(other, 'SDA') != gpio_of(device, 'SDA'):
@@ -227,12 +245,18 @@ def setup(all_devices):
                 import ds18x20
                 import onewire
                 instances[ident] = ds18x20.DS18X20(onewire.OneWire(machine.Pin(gpio_of(device, 'DATA'))))
-            elif kind in ('sht30', 'tmp102', 'tca9548a'):
+            elif kind in ('sht30', 'tmp102', 'tca9548a', 'ssd1306'):
                 sda = gpio_of(device, 'SDA')
                 if sda not in shared_buses:
-                    shared_buses[sda] = machine.I2C((sda // 2) % 2,
+                    # SoftI2C permits more than two independent buses, allowing
+                    # several fixed-address SHT30s without an address conflict.
+                    shared_buses[sda] = machine.SoftI2C(
                         sda=machine.Pin(sda), scl=machine.Pin(sda + 1), freq=100000)
-                instances[ident] = shared_buses[sda]
+                if kind == 'ssd1306':
+                    from ssd1306 import SSD1306_I2C
+                    instances[ident] = SSD1306_I2C(128, 64, shared_buses[sda], address_of(device))
+                else:
+                    instances[ident] = shared_buses[sda]
         except Exception as exc:
             print('Device', ident, 'setup error:', exc)
 
@@ -267,7 +291,9 @@ def reading(device):
     if cached and time.ticks_diff(current, cached[0]) < ttl:
         return cached[1]
     try:
-        sensor = instances[ident]
+        sensor = instances.get(ident)
+        if sensor is None:
+            raise ValueError('Device is not responding; check its power and wiring')
         if kind == 'button':
             result = {'pressed': sensor.value() == 0}
         elif kind in ('pir', 'led', 'active_buzzer', 'relay_module'):
@@ -304,10 +330,14 @@ def reading(device):
             result = {'temperature_c': value * 0.0625}
         elif kind == 'tca9548a':
             result = {'channels': 8, 'address': address_of(device)}
+        elif kind == 'ssd1306':
+            result = {'status': 'active', 'address': address_of(device)}
         else:
             result = None
     except Exception as exc:
         result = {'error': str(exc)}
+    if isinstance(result, dict):
+        result['time_of_reading'] = time_of_reading()
     last_read[ident] = (time.ticks_ms(), result)
     return result
 
@@ -316,3 +346,68 @@ def view(device):
     result = dict(device)
     result['reading'] = reading(device)
     return result
+
+
+def _display_lines(ip=''):
+    """Return one sensor page with status and a five-second countdown."""
+    global display_cycle_index, display_countdown_step
+    pages = []
+    for device in configured_devices:
+        if device['type'] == 'ssd1306':
+            continue
+        result = reading(device)
+        if result.get('error'):
+            continue
+        if 'temperature_c' not in result or 'humidity_percent' not in result:
+            continue
+        temperature = result['temperature_c']
+        humidity = result['humidity_percent']
+        issues = []
+        if temperature < REAPER_TEMP_MIN_C:
+            issues.append('* Temp low')
+        elif temperature > REAPER_TEMP_MAX_C:
+            issues.append('* Temp high')
+        if humidity < REAPER_HUMIDITY_MIN:
+            issues.append('* Humidity low')
+        elif humidity > REAPER_HUMIDITY_MAX:
+            issues.append('* Humidity high')
+        pages.append([
+            (device.get('note') or device['name'])[:16], '',
+            '%.1fC / %.1fF' % (temperature, temperature * 9 / 5 + 32),
+            'Humidity %.1f%%' % humidity,
+            '', issues[0] if issues else 'Good',
+            issues[1] if len(issues) > 1 else '',
+        ])
+    if not pages:
+        return ['Pico Plant', 'Monitor', '', ip[:16] if ip else 'No sensor data']
+    page = pages[display_cycle_index % len(pages)]
+    remaining = 5 - display_countdown_step
+    page.append('Next [' + '#' * remaining + '.' * (5 - remaining) + ']')
+    display_countdown_step += 1
+    if display_countdown_step >= 5:
+        display_countdown_step = 0
+        display_cycle_index = (display_cycle_index + 1) % len(pages)
+    return page
+
+
+def refresh_displays(ip=''):
+    """Redraw all configured OLEDs; one failed display must not stop the server."""
+    global last_display_lines
+    lines = _display_lines(ip)
+    last_display_lines = list(lines)
+    for device in configured_devices:
+        if device['type'] != 'ssd1306':
+            continue
+        try:
+            display = instances[device['id']]
+            display.fill(0)
+            for row, line in enumerate(lines):
+                display.text(line, 0, row * 8, 1)
+            display.show()
+        except Exception as exc:
+            print('Display', device['id'], 'refresh error:', exc)
+
+
+def display_snapshot():
+    """Return the exact text most recently sent to the physical OLED."""
+    return {'width': 128, 'height': 64, 'lines': list(last_display_lines)}

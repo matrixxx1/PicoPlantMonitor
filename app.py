@@ -8,6 +8,11 @@ import time
 import devices
 import auto_post
 
+try:
+    import ntptime
+except ImportError:
+    ntptime = None
+
 CONFIG = 'config.json'
 GPIO = list(range(23)) + [26, 27, 28]
 PHYSICAL = {0: 1, 1: 2, 2: 4, 3: 5, 4: 6, 5: 7, 6: 9, 7: 10,
@@ -163,7 +168,7 @@ def device_record(value, ident):
         record['channels'] = [{'name': str(item.get('name', '')),
                                'note': str(item.get('note', ''))}
                               for item in value['channels']]
-    elif value['type'] in ('sht30', 'tmp102'):
+    elif value['type'] in ('sht30', 'tmp102', 'ssd1306'):
         record['bus'] = devices.bus_of(value)
     if value['type'] in auto_post.SENSOR_TYPES:
         record['auto_post'] = auto_post.settings(value, value['type'])
@@ -278,6 +283,11 @@ def connect_wifi():
     for _ in range(30):
         if station.isconnected():
             print('LAN IP:', station.ifconfig()[0])
+            if ntptime:
+                try:
+                    ntptime.settime()
+                except Exception as exc:
+                    print('Clock sync failed:', exc)
             return
         time.sleep(0.5)
     start_ap()
@@ -398,6 +408,8 @@ def handle(client):
                   'ip': station.ifconfig()[0] if station and station.isconnected() else AP_IP,
                   'ssid': config.get('wifi', {}).get('ssid', ''),
                   'setup_ap': bool(access_point and access_point.active())})
+    elif path == '/api/display' and method == 'GET':
+        send_json(client, '200 OK', devices.display_snapshot())
     elif path == '/api/reboot' and method == 'POST':
         send_json(client, '200 OK', {'rebooting': True})
         time.sleep(0.5)
@@ -572,6 +584,7 @@ def run():
         if item.get('auto_post', {}).get('enabled'):
             auto_post.last_attempt[item['id']] = schedule_start
     connect_wifi()
+    devices.refresh_displays(station.ifconfig()[0] if station and station.isconnected() else AP_IP)
     server = socket.socket()
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', 80))
@@ -582,8 +595,12 @@ def run():
     dns.bind(('0.0.0.0', 53))
     dns.settimeout(0.01)
     last_auto_check = time.ticks_ms()
+    last_display_refresh = last_auto_check
     while True:
         now = time.ticks_ms()
+        if time.ticks_diff(now, last_display_refresh) >= 1000:
+            last_display_refresh = now
+            devices.refresh_displays(station.ifconfig()[0] if station and station.isconnected() else AP_IP)
         if time.ticks_diff(now, last_auto_check) >= 60000:
             last_auto_check = now
             auto_post.check(config['devices'], devices.reading,
