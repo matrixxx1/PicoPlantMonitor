@@ -101,8 +101,8 @@ configured_devices = []
 display_cycle_index = 0
 display_countdown_step = 0
 last_display_lines = ['Pico Plant', 'Monitor', '', 'Starting...']
-REAPER_TEMP_MIN_C = 21.0
-REAPER_TEMP_MAX_C = 32.0
+REAPER_TEMP_MIN_F = 80.0
+REAPER_TEMP_MAX_F = 90.0
 REAPER_HUMIDITY_MIN = 50.0
 REAPER_HUMIDITY_MAX = 70.0
 
@@ -361,11 +361,12 @@ def _display_lines(ip=''):
         if 'temperature_c' not in result or 'humidity_percent' not in result:
             continue
         temperature = result['temperature_c']
+        temperature_f = temperature * 9 / 5 + 32
         humidity = result['humidity_percent']
         issues = []
-        if temperature < REAPER_TEMP_MIN_C:
+        if temperature_f < REAPER_TEMP_MIN_F:
             issues.append('* Temp low')
-        elif temperature > REAPER_TEMP_MAX_C:
+        elif temperature_f > REAPER_TEMP_MAX_F:
             issues.append('* Temp high')
         if humidity < REAPER_HUMIDITY_MIN:
             issues.append('* Humidity low')
@@ -373,7 +374,7 @@ def _display_lines(ip=''):
             issues.append('* Humidity high')
         pages.append([
             (device.get('note') or device['name'])[:16], '',
-            '%.1fC / %.1fF' % (temperature, temperature * 9 / 5 + 32),
+            '%.1fC / %.1fF' % (temperature, temperature_f),
             'Humidity %.1f%%' % humidity,
             '', issues[0] if issues else 'Good',
             issues[1] if len(issues) > 1 else '',

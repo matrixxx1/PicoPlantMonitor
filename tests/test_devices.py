@@ -103,8 +103,8 @@ class DeviceValidationTests(unittest.TestCase):
         sensors[0]['note'] = 'Seed bay 1'
         sensors[1]['note'] = 'Seed bay 2'
         readings = {
-            '1': {'temperature_c': 21.25, 'humidity_percent': 45.5},
-            '2': {'temperature_c': 22.75, 'humidity_percent': 55.5},
+            '1': {'temperature_c': 27, 'humidity_percent': 45.5},
+            '2': {'temperature_c': 28, 'humidity_percent': 55.5},
         }
         original_reading = devices.reading
         original_devices = devices.configured_devices[:]
@@ -127,10 +127,10 @@ class DeviceValidationTests(unittest.TestCase):
             devices._display_lines()
         third = devices._display_lines()
 
-        self.assertEqual(first, ['Seed bay 1', '', '21.2C / 70.2F', 'Humidity 45.5%',
+        self.assertEqual(first, ['Seed bay 1', '', '27.0C / 80.6F', 'Humidity 45.5%',
                                  '', '* Humidity low', '', 'Next [#####]'])
         self.assertEqual(last_first[-1], 'Next [#....]')
-        self.assertEqual(second, ['Seed bay 2', '', '22.8C / 73.0F', 'Humidity 55.5%',
+        self.assertEqual(second, ['Seed bay 2', '', '28.0C / 82.4F', 'Humidity 55.5%',
                                   '', 'Good', '', 'Next [#####]'])
         self.assertEqual(third, first)
 
@@ -153,6 +153,29 @@ class DeviceValidationTests(unittest.TestCase):
 
         self.assertEqual(lines[5], '* Temp high')
         self.assertEqual(lines[6], '* Humidity low')
+
+    def test_reaper_display_uses_80_to_90_fahrenheit_and_50_to_70_humidity(self):
+        sensor = assignment('sht30', {'SDA': 1, 'SCL': 2, 'VCC': 36, 'GND': 38}, '1', 68)
+        original_reading = devices.reading
+        original_devices = devices.configured_devices[:]
+        original_index = devices.display_cycle_index
+        original_step = devices.display_countdown_step
+        devices.configured_devices[:] = [sensor]
+        devices.display_cycle_index = devices.display_countdown_step = 0
+        self.addCleanup(setattr, devices, 'reading', original_reading)
+        self.addCleanup(devices.configured_devices.__setitem__, slice(None), original_devices)
+        self.addCleanup(setattr, devices, 'display_cycle_index', original_index)
+        self.addCleanup(setattr, devices, 'display_countdown_step', original_step)
+
+        for temperature_f, humidity, expected in [
+                (79.9, 60, '* Temp low'), (80, 50, 'Good'),
+                (90, 70, 'Good'), (90.1, 60, '* Temp high'),
+                (85, 49.9, '* Humidity low'), (85, 70.1, '* Humidity high')]:
+            temperature_c = (temperature_f - 32) * 5 / 9
+            devices.reading = lambda _, t=temperature_c, h=humidity: {
+                'temperature_c': t, 'humidity_percent': h}
+            devices.display_cycle_index = devices.display_countdown_step = 0
+            self.assertEqual(devices._display_lines()[5], expected)
 
     def test_analog_sensor_only_uses_adc(self):
         sensor = assignment('soil_moisture', {'ANALOG': 6, 'VCC': 36, 'GND': 33})
